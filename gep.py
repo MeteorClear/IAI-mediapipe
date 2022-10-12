@@ -1,4 +1,5 @@
 import cv2
+import math
 import numpy as np
 import mediapipe as mp
 import pyautogui as pg
@@ -64,10 +65,6 @@ def check_position_move(pos,cw,ch):
     
 
 
-
-
-
-# 확대 축소 페이지업 다운
 def check_zoom_rotate(pos,cw,ch):
   global key_check
 
@@ -88,6 +85,26 @@ def check_zoom_rotate(pos,cw,ch):
   else:
     key_turn_off('pageup')
     key_turn_off('pagedown')
+
+
+# float
+def cal_distance(x1,x2,y1,y2,z1=0,z2=0):
+  return ((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2) ** (1/2)
+
+# int
+def cal_mid_point(x1,x2,y1,y2,z1=0,z2=0):
+  if z1==0 and z2==0:
+    return ((x1+x2)//2, (y1+y2)//2)
+  else:
+    return ((x1+x2)//2, (y1+y2)//2, (z1+z2)//2)
+
+# radian
+def cal_three_point_angle(x1,x2,y1,y2,midx1,midy1,midx2,midy2):
+  diffx = midx2-midx1
+  diffy = midy2-midy1
+  x2-=diffx
+  y2-=diffy
+  return (math.atan((y2-midy1)/(x2-midx1)) - math.atan((y1-midy1)/(x1-midx1)))
 
 
 
@@ -168,8 +185,18 @@ with mp_hands.Hands(
      
     cv2.imshow('main frame', cv2.flip(image, 1))
 
+
     try:
-      cv2.circle(gray_image, (landmarks_coordinates[8][0],landmarks_coordinates[8][1]), 12, (255,255,2550), 2)
+      temp_midpoint = cal_mid_point(landmarks_coordinates[4][0],landmarks_coordinates[8][0],landmarks_coordinates[4][1],landmarks_coordinates[8][1])
+      #print(temp_midpoint)
+    except:
+      pass
+
+    try:
+      cv2.circle(gray_image, (landmarks_coordinates[8][0],landmarks_coordinates[8][1]), 12, (255,255,255), 2)
+      cv2.line(gray_image, (landmarks_coordinates[8][0],landmarks_coordinates[8][1]), (landmarks_coordinates[4][0],landmarks_coordinates[4][1]), (255,255,255), 2)
+      cv2.circle(gray_image, temp_midpoint, 5, (0,255,0), 2)
+      
     except:
       pass
 
@@ -179,6 +206,11 @@ with mp_hands.Hands(
     
     try:
       cv2.putText(gray_image, "("+str(landmarks_coordinates[8][0])+","+str(landmarks_coordinates[8][1])+")", (20,50), cv2.FONT_ITALIC, 1, (255,0,0), 2)
+      t_midx, t_midy = temp_midpoint
+      t_distance = cal_distance(landmarks_coordinates[4][0],landmarks_coordinates[8][0],landmarks_coordinates[4][1],landmarks_coordinates[8][1])
+      t_distance = round(t_distance, 3)
+      cv2.putText(gray_image, str(t_distance), (image_width-t_midx-30, t_midy-15), cv2.FONT_ITALIC, 0.5, (0,0,255), 2)
+
     except:
       cv2.putText(gray_image, "-Undetected-", (20,50), cv2.FONT_ITALIC, 1, (255,0,0), 2)
 
