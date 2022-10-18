@@ -99,14 +99,10 @@ def cal_mid_point(x1,x2,y1,y2,z1=0,z2=0):
     return ((x1+x2)//2, (y1+y2)//2, (z1+z2)//2)
 
 # radian
-def cal_three_point_angle(x1,x2,y1,y2,midx1,midy1,midx2,midy2):
-  diffx = midx2-midx1
-  diffy = midy2-midy1
-  x2-=diffx
-  y2-=diffy
-  return (math.atan((y2-midy1)/(x2-midx1)) - math.atan((y1-midy1)/(x1-midx1)))
+def cal_three_point_angle(x1,x2,y1,y2,midptx,midpty):
+  return (math.atan((y2-midpty)/(x2-midptx)) - math.atan((y1-midpty)/(x1-midptx)))
 
-
+#atan( (점1 Y - 점2 Y) / ( 점1 X- 점2X)) - atan( (점 3 Y - 점2Y) / (점3 X - 점2X))  * 180/pi
 
 
 # For webcam input:
@@ -142,6 +138,15 @@ with mp_hands.Hands(
     cv2.rectangle(gray_image, (gi_width, gi_height), (0, int(gi_height-(gi_height*0.25))), (255,255,255), 2)
     cv2.rectangle(gray_image, (0, 0), (int(gi_width*0.25), gi_height), (255,255,255), 2)
     cv2.rectangle(gray_image, (gi_width, gi_height), (int(gi_width-(gi_width*0.25)), 0), (255,255,255), 2)
+
+
+    angle_image = np.zeros(image.shape, dtype=np.uint8)
+    angle_image[:] = (160, 160, 160)
+    adi_height, adi_width, adi_c = angle_image.shape
+    cv2.line(angle_image, (adi_width//2-1, 0), (adi_width//2-1, adi_height), (255,255,255), 2)
+    cv2.line(angle_image, (0, adi_height//2-1), (adi_width, adi_height//2-1), (255,255,255), 2)
+    #print(adi_width//2,adi_height//2)
+    
     
 
 
@@ -171,6 +176,10 @@ with mp_hands.Hands(
             mp_drawing_styles.get_default_hand_landmarks_style(),
             mp_drawing_styles.get_default_hand_connections_style())
 
+        # in for loop
+      ######################### 
+      # write
+
       if SYSMODE==0:
         pass
       elif SYSMODE==1:
@@ -182,9 +191,18 @@ with mp_hands.Hands(
         print(SYSMODE)
         break
     
-     
+
     cv2.imshow('main frame', cv2.flip(image, 1))
 
+##########################################################################
+    # write
+    
+    temp_midpoint = -1
+    t_distance = -1
+
+
+
+########################################################################## gray_image section1
 
     try:
       temp_midpoint = cal_mid_point(landmarks_coordinates[4][0],landmarks_coordinates[8][0],landmarks_coordinates[4][1],landmarks_coordinates[8][1])
@@ -200,9 +218,10 @@ with mp_hands.Hands(
     except:
       pass
 
+
+########################################################################## gray_image section2
     gray_image = cv2.flip(gray_image, 1)
 
-    
     
     try:
       cv2.putText(gray_image, "("+str(landmarks_coordinates[8][0])+","+str(landmarks_coordinates[8][1])+")", (20,50), cv2.FONT_ITALIC, 1, (255,0,0), 2)
@@ -237,9 +256,70 @@ with mp_hands.Hands(
           cv2.putText(gray_image, "RIGHT", (20,115), cv2.FONT_ITALIC, 0.5, (0,0,255), 2)
       except:
         pass
+
+
+
+########################################################################## angle_image section1
+
+    img_midpt_x, img_midpt_y = image_width//2, image_height//2
+    anglex, angley = -1, -1
+
+    try:
+      act_midx, act_midy = temp_midpoint
+      
+      nor_x, nor_y = abs(img_midpt_x-act_midx), abs(img_midpt_y-act_midy)
+
+      if act_midx>img_midpt_x:
+        nor_x = -nor_x
+      if act_midy>img_midpt_y:
+        nor_y = -nor_y
+
+      #print(act_midx+nor_x, act_midy+nor_y)
+      #print(image_width,img_midpt_y,nor_y,act_midy,act_midy+nor_y)
+      cv2.line(angle_image, (landmarks_coordinates[4][0]+nor_x, landmarks_coordinates[4][1]+nor_y), (landmarks_coordinates[8][0]+nor_x, landmarks_coordinates[8][1]+nor_y), (50,255,50), 2)
+      cv2.circle(angle_image, (act_midx+nor_x, act_midy+nor_y), 5, (0,0,255), 2)
+      cv2.circle(angle_image, (landmarks_coordinates[4][0]+nor_x, landmarks_coordinates[4][1]+nor_y), 5, (255,0,0), 2)
+      cv2.circle(angle_image, (landmarks_coordinates[8][0]+nor_x, landmarks_coordinates[8][1]+nor_y), 5, (255,0,0), 2)
+      
+      anglex, angley = landmarks_coordinates[8][0]+nor_x, landmarks_coordinates[8][1]+nor_y
+    except:
+      pass
+
+
+
+########################################################################## angle_image section2
+    angle_image = cv2.flip(angle_image, 1)
+
+
+
+    try:
+      t_text = str(t_distance)
+      textsize = cv2.getTextSize(t_text, cv2.FONT_ITALIC, 1, 2)[0]
+      textX = (angle_image.shape[1] - textsize[0]) // 2
+      textY = (angle_image.shape[0] + textsize[1]) // 2
+
+      t_midx, t_midy = temp_midpoint
+      cv2.putText(angle_image, str(t_distance), (textX+10, textY+150), cv2.FONT_ITALIC, 0.8, (0,0,255), 2)
+
+    except:
+      cv2.putText(angle_image, "-Undetected-", (adi_width//2-85, textY+150), cv2.FONT_ITALIC, 0.8, (255,0,0), 2)
+
+
+    try:
+      t_angle = cal_three_point_angle(anglex, img_midpt_x-1, angley, 1, img_midpt_x, img_midpt_y)
+      print(t_angle,(math.pi/180)*t_angle)
+      
+    except:
+      pass
     
+
+
+
+
+##########################################################################
     
     cv2.imshow('sub', gray_image)
+    cv2.imshow('debug', angle_image)
 
     key_input = cv2.waitKey(5)
     
