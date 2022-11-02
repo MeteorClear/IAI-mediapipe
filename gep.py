@@ -1,5 +1,6 @@
 import cv2
 import math
+import time
 import numpy as np
 import mediapipe as mp
 import pyautogui as pg
@@ -9,8 +10,19 @@ mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
 
 SYSMODE = 1
+FIND_CHECK = False
 
+lock_check = False
+lock_start = False
+lock_end = False
+lock_time_start = 0
+lock_time_check = 0
 
+LOCK_LIMIT_TIME = 3
+LOCKED_position = []
+
+prevTime = 0
+curTime = 0
 
 
 
@@ -105,6 +117,33 @@ def cal_three_point_angle(x1,x2,y1,y2,midptx,midpty):
 #atan( (점1 Y - 점2 Y) / ( 점1 X- 점2X)) - atan( (점 3 Y - 점2Y) / (점3 X - 점2X))  * 180/pi
 
 
+
+#두점 사이의 각도:(getAngle3P 계산용) 시계 방향으로 계산한다. P1-(0,0)-P2의 각도를 시계방향으로
+def angle_between(p1, p2):
+  ang1 = np.arctan2(*p1[::-1])
+  ang2 = np.arctan2(*p2[::-1])
+  res = np.rad2deg((ang1 - ang2) % (2 * np.pi))
+  return res
+#세점 사이의 각도 1->2->3
+def getAngle3P(p1, p2, p3, direction="CW"): 
+  pt1 = (p1[0] - p2[0], p1[1] - p2[1])
+  pt2 = (p3[0] - p2[0], p3[1] - p2[1])
+  res = angle_between(pt1, pt2)
+  res = (res + 360) % 360
+  if direction == "CCW":    #반시계방향
+    res = (360 - res) % 360
+  return res
+
+
+
+
+
+
+
+
+
+
+
 # For webcam input:
 cap = cv2.VideoCapture(0)
 with mp_hands.Hands(
@@ -119,7 +158,13 @@ with mp_hands.Hands(
       print("Ignoring empty camera frame.")
       continue
     
-    
+    curTime = time.time()
+    sec = curTime - prevTime
+    prevTime = curTime
+    fps = int(1/sec)
+
+
+
     image_height, image_width, channel = image.shape
     
     image.flags.writeable = False
@@ -153,6 +198,7 @@ with mp_hands.Hands(
     low_landmarks_coordinates = []
     landmarks_coordinates = []
     if results.multi_hand_landmarks:
+      FIND_CHECK = True
       for hand_landmarks in results.multi_hand_landmarks:
 
         for idx, landmark_cor in enumerate(hand_landmarks.landmark):
@@ -179,6 +225,10 @@ with mp_hands.Hands(
         # in for loop
       ######################### 
       # write
+
+      
+
+
 
       if SYSMODE==0:
         pass
@@ -263,6 +313,7 @@ with mp_hands.Hands(
 
     img_midpt_x, img_midpt_y = image_width//2, image_height//2
     anglex, angley = -1, -1
+    l_anglex, l_angley = -1, -1
 
     try:
       act_midx, act_midy = temp_midpoint
@@ -285,12 +336,34 @@ with mp_hands.Hands(
     except:
       pass
 
+    try:
+      temp_l_midpoint = cal_mid_point(LOCKED_position[4][0],LOCKED_position[8][0],LOCKED_position[4][1],LOCKED_position[8][1])
+      act_l_midx, act_l_midy = temp_l_midpoint
+      
+      nor_l_x, nor_l_y = abs(img_midpt_x-act_l_midx), abs(img_midpt_y-act_l_midy)
+
+      if act_l_midx>img_midpt_x:
+        nor_l_x = -nor_l_x
+      if act_l_midy>img_midpt_y:
+        nor_l_y = -nor_l_y
+
+      if len(LOCKED_position)>10:
+        cv2.line(angle_image, (LOCKED_position[4][0]+nor_l_x, LOCKED_position[4][1]+nor_l_y), (LOCKED_position[8][0]+nor_l_x, LOCKED_position[8][1]+nor_l_y), (50,50,255), 2)
+        cv2.circle(angle_image, (LOCKED_position[4][0]+nor_l_x, LOCKED_position[4][1]+nor_l_y), 5, (0,0,255), 2)
+        cv2.circle(angle_image, (LOCKED_position[8][0]+nor_l_x, LOCKED_position[8][1]+nor_l_y), 5, (0,0,255), 2)
+        
+        l_anglex, l_angley = LOCKED_position[8][0]+nor_l_x, LOCKED_position[8][1]+nor_l_y
+    except:
+      pass
 
 
 ########################################################################## angle_image section2
     angle_image = cv2.flip(angle_image, 1)
 
-
+    try:
+      cv2.putText(angle_image, "fps:"+str(fps), (50, 50), cv2.FONT_ITALIC, 0.8, (0,0,255), 2)
+    except:
+      pass
 
     try:
       t_text = str(t_distance)
@@ -299,20 +372,66 @@ with mp_hands.Hands(
       textY = (angle_image.shape[0] + textsize[1]) // 2
 
       t_midx, t_midy = temp_midpoint
-      cv2.putText(angle_image, str(t_distance), (textX+10, textY+150), cv2.FONT_ITALIC, 0.8, (0,0,255), 2)
+      cv2.putText(angle_image, str(t_distance), (textX+10, adi_height//2+150), cv2.FONT_ITALIC, 0.8, (0,0,255), 2)
 
     except:
-      cv2.putText(angle_image, "-Undetected-", (adi_width//2-85, textY+150), cv2.FONT_ITALIC, 0.8, (255,0,0), 2)
+      cv2.putText(angle_image, "-Undetected-", (adi_width//2-85, adi_height//2+150), cv2.FONT_ITALIC, 0.8, (255,0,0), 2)
 
 
     try:
+      #radian
       t_angle = cal_three_point_angle(anglex, img_midpt_x-1, angley, 1, img_midpt_x, img_midpt_y)
-      print(t_angle,(math.pi/180)*t_angle)
+      t_angle_degree = (t_angle/math.pi*180)
+      t_angle_degree = round(t_angle_degree, 6)
+      if t_angle_degree != 52.861824:
+        t_angle_degree = round(t_angle_degree, 3)
+        cv2.putText(angle_image, str(t_angle_degree), (adi_width//2-55, adi_height//2+180), cv2.FONT_ITALIC, 0.8, (0,255,0), 2)
+      else:
+        cv2.putText(angle_image, "-Undetected-", (adi_width//2-85, adi_height//2+180), cv2.FONT_ITALIC, 0.8, (255,0,0), 2)
+      
+    except:
+      pass
+
+
+    try:
+      #radian
+      t_l_angle = cal_three_point_angle(anglex, l_anglex, angley, l_angley, img_midpt_x, img_midpt_y)
+      t_l_angle_degree = (t_l_angle/math.pi*180)
+      t_l_angle_degree = round(t_l_angle_degree, 3)
+      if t_l_angle_degree != 0.0:
+        cv2.putText(angle_image, str(t_l_angle_degree), (adi_width//2-55, adi_height//2+210), cv2.FONT_ITALIC, 0.8, (0,255,0), 2)
+      else:
+        cv2.putText(angle_image, "-Undetected-", (adi_width//2-85, adi_height//2+210), cv2.FONT_ITALIC, 0.8, (255,0,0), 2)
       
     except:
       pass
     
-
+##########################################################################
+    print(LOCKED_position)
+    if FIND_CHECK:
+      lock_end = False
+      if not lock_check:
+        if lock_start:
+          lock_time_check = time.time()
+          lock_time = lock_time_check - lock_time_start
+          if lock_time > LOCK_LIMIT_TIME:
+            LOCKED_position = landmarks_coordinates.copy()
+            lock_check = True
+        else:
+          lock_time_start = time.time()
+          lock_start = True
+    else:
+      lock_start = False
+      if lock_check:
+        if lock_end:
+          lock_time_check = time.time()
+          lock_time = lock_time_check - lock_time_start
+          if lock_time > LOCK_LIMIT_TIME:
+            LOCKED_position = []
+            lock_check = False
+        else:
+          lock_time_start = time.time()
+          lock_end = True
 
 
 
@@ -321,7 +440,7 @@ with mp_hands.Hands(
     cv2.imshow('sub', gray_image)
     cv2.imshow('debug', angle_image)
 
-    key_input = cv2.waitKey(5)
+    key_input = cv2.waitKey(1)
     
     
     if key_input & 0xFF == 27:
@@ -334,5 +453,7 @@ with mp_hands.Hands(
         pass
       else:
         print(key_input & 0xFF)
+
+    FIND_CHECK = False
 
 cap.release()
